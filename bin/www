@@ -1,0 +1,161 @@
+#!/usr/bin/env node
+
+/**
+ * Module dependencies.
+ */
+
+var app = require('../app');
+var debug = require('debug')('a:server');
+var http = require('http');
+
+/**
+ * Get port from environment and store in Express.
+ */
+
+var port = normalizePort(process.env.PORT || '8000');
+app.set('port', port);
+
+/**
+ * Create HTTP server.
+ */
+
+var server = http.createServer(app);
+let clientsActivity = {}; // 用来存储每个客户端的最后活跃时间
+let userInfo = {
+    userName: "robot",
+    headImg:"285f903f5a1e9861ffb37e5d49da85b9.png"
+};
+//新增socket.io模块
+var io = require('socket.io')(server);
+
+io.on('connection', function(socket){
+let timer;
+  // 初始化新连接的活动时间
+  clientsActivity[socket.id] = Date.now();
+
+  //接受客户端传送的sendMessage命令
+  socket.on('sendMessage', function(ioUserInfo,msg){
+   clientsActivity[socket.id] = Date.now();
+    console.log(ioUserInfo);  //用户ioUserInfo
+    console.log(msg);  //接受用户发送的信息
+    // 更新此客户端的活动时间
+     clearInterval(timer); // 清除之前的计时器
+      // 设置新的计时器
+         timer = setInterval(() => {
+         for (const clientId in clientsActivity) {
+             if (clientsActivity.hasOwnProperty(clientId)) {
+               // 如果超过5秒没有活动
+                 io.to(clientId).emit('getMessage', userInfo,getGreeting(msg));
+                 // 可选择重置活动时间，避免连续发送
+             }
+           }
+         }, 10000);
+          //结束对话
+          if(msg === "结束对话") {
+              for (const clientId in clientsActivity) {
+                  if (clientsActivity.hasOwnProperty(clientId)) {
+                    clearInterval(timer);
+                    //io.to(clientId).emit('getMessage', userInfo,"好的，我们下次再聊");
+                  }
+              }
+          }
+    //通过接受sendMessage这个action的数据再广播给所有'订阅的人'(即on了这个事件的)
+    socket.broadcast.emit('getMessage', ioUserInfo, msg); //注意接收和发送方法的对象不一样
+    //io.sockets是发送给所有人
+    //socket.broadcast是发送除自己外的人
+  });
+})
+function getGreeting(option) {
+  let greeting;
+  switch (option) {
+    case '你好呀':
+      greeting = '我很好，你呢？';
+      break;
+    case '今天天气怎么样？':
+      greeting = '晴朗明媚适合外出哦！';
+      break;
+    case '你最喜欢的颜色是什么？':
+      greeting = '作为AI我没有喜好，但我喜欢处理各种颜色的数据';
+      break;
+    default:
+      greeting = '你好！';
+      break;
+  }
+  // 注意：这里直接返回了计算后的结果
+  return greeting;
+}
+// server = new WebpackDevServer(compiler, {
+//     publicPath: config.output.publicPath,
+//     stats: {
+//         colors: true
+//     }
+// });
+/**
+ * Listen on provided port, on all network interfaces.
+ */
+
+server.listen(port,function(){
+  console.log('Server on port:' + port)
+});
+server.on('error', onError);
+server.on('listening', onListening);
+
+/**
+ * Normalize a port into a number, string, or false.
+ */
+
+function normalizePort(val) {
+  var port = parseInt(val, 10);
+
+  if (isNaN(port)) {
+    // named pipe
+    return val;
+  }
+
+  if (port >= 0) {
+    // port number
+    return port;
+  }
+
+  return false;
+}
+
+/**
+ * Event listener for HTTP server "error" event.
+ */
+
+function onError(error) {
+  if (error.syscall !== 'listen') {
+    throw error;
+  }
+
+  var bind = typeof port === 'string'
+  ? 'Pipe ' + port
+  : 'Port ' + port;
+
+  // handle specific listen errors with friendly messages
+  switch (error.code) {
+    case 'EACCES':
+      console.error(bind + ' requires elevated privileges');
+      process.exit(1);
+      break;
+    case 'EADDRINUSE':
+      console.error(bind + ' is already in use');
+      process.exit(1);
+      break;
+    default:
+      throw error;
+  }
+}
+
+/**
+ * Event listener for HTTP server "listening" event.
+ */
+
+function onListening() {
+  var addr = server.address();
+  var bind = typeof addr === 'string'
+  ? 'pipe ' + addr
+  : 'port ' + addr.port;
+  debug('Listening on ' + bind);
+}
